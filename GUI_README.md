@@ -1,23 +1,12 @@
-# Diana Bot Control Center
-
-Run `start_gui.bat` on Windows, or `python gui.py`.
-
-The GUI is intentionally a thin launcher/control layer. It installs dependencies, edits the existing connection/persona files, starts/stops `bot.py`, and displays the bot's current coarse processing stage. It does not redesign Diana's conversation, memory, Discord, image, or evolution architecture.
-
-## Credential separation
-
-The existing three API-key files remain independent:
-
-- `config/google_api_key_chat.txt`
-- `config/google_api_key_evolution.txt`
-- `config/google_api_key_image.txt`
-
-Discord remains `config/discord_token.txt`. The GUI preserves extra lines in the evolution key file when editing its first-line key, so the evolution model stored on line 2 is not destroyed.
-
-## GUI-managed non-secret settings
-
-`config/gui_config.json` stores Local/Web/Image endpoints and model names plus temperature/thinking-token settings. `bot.py` only reads the settings needed to honor the GUI; its main control flow remains unchanged.
-
-## Persona
-
-The Character page supports the current Diana persona, a blank schema-compatible template, and three LLM-generated candidates. Persona generation uses the configured Local API and does not add a new routing layer.
+   - **即時儀表板 KPI 卡片**：在寬螢幕／標準模式下採 `1x4` 四欄並排，當工作區變窄時自動切換為 `2x2` 雙欄網格，並即時更新文字自動換行寬度（`wraplength`），徹底消除文字截斷。
+   - **上下可拖曳分割視窗 (`tk.PanedWindow`)**：儀表板上方的「KPI 狀態 + 處理管線」與下方的「即時終端機日誌」之間提供可自由上下拉動的分隔線（Sash），方便隨時放大日誌視野。
+   - **控制列自動換行**：當視窗寬度較窄時，「啟動／停止／重啟」按鈕群組與「日誌篩選／自動捲動／複製清除」工具列自動切換為上下雙排顯示，避免元件互相擠壓。
+   - **向量管線進度圖 (`PipelineStepperCanvas`)**：依據視窗實際寬度動態縮放 6 大階段節點間距、圓圈半徑與字體大小。
+4. **全頁面自適應捲動容器 (`ResponsiveScrollFrame`)**
+   - 「連線與金鑰」、「角色設定工坊（視覺化表單）」與「系統診斷與演化」皆內建滑鼠滾輪自適應捲動容器，並在窄視窗下自動將雙欄表單重排為單欄垂直堆疊。
+5. **內建一鍵啟動補丁推送小工具 (`patch_pusher.py`)**
+   - 頂部工具列右上角提供 **「🩹 開啟補丁推送工具」** 快速按鈕，可隨時呼叫 `Diana Patch Pusher` 將 `.patch` 補丁安裝至本地並推送到 GitHub。
+<<<<<<< ours
+>>>>>>> theirs
+=======
+>>>>>>> theirs
