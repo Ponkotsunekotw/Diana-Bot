@@ -1,0 +1,33 @@
+# Python cache & virtualenvs
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+
+# Secrets & API Keys
+config/discord_token.txt
+config/google_api_key_chat.txt
+config/google_api_key_evolution.txt
+config/google_api_key_image.txt
+config/google API key*.txt
+
+# Private Memory, User Binding & Runtime State
+diana_memory_db/
+data/base.json
+data/memory.json
+data/favorability.json
+data/user_profile.json
+data/bot_state.json
+data/runtime_status.json
+data/guest_notes.json
+data/reminders.json
+*.memory
+
+# Logs
+logs/*.txt
+logs/*.log

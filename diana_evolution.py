@@ -15,9 +15,9 @@ diana_evolution.py
 - 初次啟動時向 Google 伺服器請求可用模型清單，由使用者手動選擇並記錄在金鑰檔第二行
 - 讀取當前對話歷史、RAG 長期記憶庫、好感度狀態、舊版人設與程式碼
 - 支援讀取 updates/upgrade.txt 執行主人主動要求的功能擴充，完成後歸檔為 done{YYMMDD}.txt
-- 兩大演化模組：
-  1. Persona Evolution (角色心智與人設成長微調 -> config/character_persona.json)
-  2. Feature Evolution (功能導向新增/微調，無需求保持現狀 -> bot.py)
+- 兩大安全演化模組（保護主程式與角色基本核心）：
+  1. Persona Evolution (角色心智成長微調 -> 僅更新 config/character_persona.json 的 evolvable_persona 成長層，鎖定基本核心設定)
+  2. Feature Evolution (附帶功能擴充 -> 僅更新 diana_addons.py，絕不直接修改 bot.py 核心主程式)
 - 自動備份至 ./old 資料夾並依照 {type}_{YYMM}.{seq}.ext 版本號歸檔、更新 data/version.json
   (跟 bot.py 的 /update 指令共用同一套命名規則與備份資料夾，版本序號不會衝突)
 - 自動生成「成長日誌 (logs/log.txt)」，供 Bot 隔天早上讀取並主動向主人匯報自己的成長
@@ -65,6 +65,7 @@ CHROMA_DIR = os.path.join(BASE_DIR, "diana_memory_db")
 GOOGLE_API_KEY_FILE = os.path.join(CONFIG_DIR, "google_api_key_evolution.txt")
 PERSONA_FILE = os.path.join(CONFIG_DIR, "character_persona.json")
 BOT_FILE = os.path.join(BASE_DIR, "bot.py")
+ADDONS_FILE = os.path.join(BASE_DIR, "diana_addons.py")
 VERSION_FILE = os.path.join(DATA_DIR, "version.json")
 MEMORY_FILE = os.path.join(DATA_DIR, "memory.json")
 PROFILE_FILE = os.path.join(DATA_DIR, "user_profile.json")
@@ -122,6 +123,13 @@ def get_api_config() -> tuple[str, str]:
 
     # 如果檔案中沒有記錄模型名稱，則向伺服器查詢並讓使用者選擇
     if not model_name:
+        if not sys.stdin or not sys.stdin.isatty():
+            model_name = "gemini-2.5-flash"
+            print(f"⚠️ 非互動式執行環境且未設定演化模型，自動使用預設模型 '{model_name}'")
+            with open(key_path, "w", encoding="utf-8") as f:
+                f.write(f"{api_key}\n{model_name}\n")
+            return api_key, model_name
+
         print("\n🔍 初次啟動或未設定模型，正在向 Google 伺服器查詢可用模型...")
         try:
             client = genai.Client(api_key=api_key)
@@ -129,7 +137,7 @@ def get_api_config() -> tuple[str, str]:
             available_models = [m.name.replace("models/", "") for m in models if "gemini" in m.name]
 
             print("\n【請選擇您要用於演化的模型】")
-            print("💡 建議選擇有免費額度的穩定模型，例如 gemini-1.5-flash 或 gemini-1.5-pro")
+            print("💡 建議選擇有免費額度的穩定模型，例如 gemini-2.5-flash 或 gemini-2.5-pro")
             for i, m_name in enumerate(available_models):
                 print(f"{i+1}. {m_name}")
 
@@ -151,8 +159,8 @@ def get_api_config() -> tuple[str, str]:
 
         except Exception as e:
             print(f"❌ 查詢模型清單失敗: {e}")
-            print("⚠️ 將自動使用預設模型 'gemini-1.5-flash'")
-            model_name = "gemini-1.5-flash"
+            print("⚠️ 將自動使用預設模型 'gemini-2.5-flash'")
+            model_name = "gemini-2.5-flash"
             with open(key_path, "w", encoding="utf-8") as f:
                 f.write(f"{api_key}\n{model_name}\n")
 
@@ -199,11 +207,16 @@ def generate_next_version(update_type: str) -> str:
 def archive_and_update(update_type: str, new_content: str) -> str:
     """將舊版封存到 ./old 並更新當前運行檔與 version.json，回傳新版本號"""
     new_version = generate_next_version(update_type)
-    ext = ".py" if update_type == "bot" else ".json"
+    ext = ".py" if update_type in ("bot", "diana_addons") else ".json"
     archive_filename = f"{update_type}_{new_version}{ext}"
     archive_path = os.path.join(OLD_DIR, archive_filename)
 
-    active_filename = BOT_FILE if update_type == "bot" else PERSONA_FILE
+    if update_type == "bot":
+        active_filename = BOT_FILE
+    elif update_type == "diana_addons":
+        active_filename = ADDONS_FILE
+    else:
+        active_filename = PERSONA_FILE
 
     # 備份舊檔案
     if os.path.exists(active_filename):
@@ -215,7 +228,7 @@ def archive_and_update(update_type: str, new_content: str) -> str:
         f.write(new_content)
 
     # 更新 version.json
-    vers = load_json(VERSION_FILE, {"bot": "1.0", "character_persona": "1.0"})
+    vers = load_json(VERSION_FILE, {"bot": "1.0", "diana_addons": "1.0", "character_persona": "1.0"})
     vers[update_type] = new_version
     save_json(VERSION_FILE, vers)
     print(f"🎉 成功更新 [{update_type}] 至版本 {new_version}！")
@@ -322,26 +335,69 @@ def collect_growth_context() -> dict:
     return context
 
 # ---------------------------------------------------------
-# 4. 演化核心 1：角色人設心智微調 (Persona Evolution)
+# 4. 演化核心 1：角色人設心智微調 (Persona Evolution — 保護基本核心，僅演化成長層)
 # ---------------------------------------------------------
 def evolve_persona(client: "genai.Client", context: dict, model_name: str) -> tuple[str, str]:
     """
-    評估並微調角色人設 (character_persona.json)
+    評估並微調角色人設 (character_persona.json) 的【可調整成長層 (evolvable_persona)】。
+    基本不變核心 (name, age_style, background, relationship, guest_attitude, core_traits, speech_patterns, tone_rules)
+    由程式碼強制鎖定保護，不會被 LLM 意外覆寫或洗掉防護規則。
     回傳: (成長摘要, 新版本號)
     """
-    print(f"\n🧠 [1/2] 正在使用 {model_name} 評估黛安娜的心智成長...")
+    print(f"\n🧠 [1/2] 正在使用 {model_name} 評估黛安娜的心智成長 (僅調整可演化成長區)...")
     current_persona = load_json(PERSONA_FILE, {})
     if not current_persona:
         print(f"❌ 找不到 {PERSONA_FILE} 或內容為空，略過人設演化。")
         return "找不到現有人設檔，略過本次心智成長。", ""
 
-    persona_json_str = json.dumps(current_persona, ensure_ascii=False, indent=2)
+    # 分離【不變基本核心】與【可動態演化成長層】
+    core_traits = current_persona.get("core_traits")
+    if not isinstance(core_traits, list) or not core_traits:
+        all_traits = current_persona.get("personality_traits", [])
+        core_traits = all_traits[:3] if all_traits else [
+            "活潑好動、天真爛漫、好奇心旺盛，喜歡打破砂鍋問到底。",
+            "話題會突然跳躍，想到什麼講什麼，不用每次都緊扣主人的問題回答。",
+            "遇到不懂的事情會表現出真的不知道的反應（歪頭、亂猜、亂問），不會裝懂或用大人的口吻分析事情。"
+        ]
 
-    prompt = f"""你是黛安娜 (Diana) 的心智成長設計師，黛安娜是一個 8~10 歲的小女孩機器人角色。
-請根據以下的現有人設 JSON 與近期互動記憶，評估是否要對她的人設進行「微幅」成長式調整。
+    evolvable_in = current_persona.get("evolvable_persona", {})
+    if not isinstance(evolvable_in, dict):
+        evolvable_in = {}
 
-【現有角色人設 JSON】
-{persona_json_str}
+    current_learned_traits = evolvable_in.get("learned_traits")
+    if not isinstance(current_learned_traits, list):
+        all_traits = current_persona.get("personality_traits", [])
+        current_learned_traits = [t for t in all_traits if t not in core_traits]
+
+    current_fav_reactions = evolvable_in.get("favorability_reactions") or current_persona.get("favorability_reactions", {})
+    current_examples = evolvable_in.get("few_shot_examples") or current_persona.get("few_shot_examples", [])
+
+    immutable_base_summary = json.dumps({
+        "name": current_persona.get("name", "黛安娜"),
+        "age_style": current_persona.get("age_style", "8~10歲小女孩"),
+        "background": current_persona.get("background", ""),
+        "relationship": current_persona.get("relationship", ""),
+        "guest_attitude": current_persona.get("guest_attitude", ""),
+        "core_traits": core_traits,
+        "speech_patterns": current_persona.get("speech_patterns", []),
+        "tone_rules": current_persona.get("tone_rules", [])
+    }, ensure_ascii=False, indent=2)
+
+    evolvable_json_str = json.dumps({
+        "learned_traits": current_learned_traits,
+        "favorability_reactions": current_fav_reactions,
+        "few_shot_examples": current_examples
+    }, ensure_ascii=False, indent=2)
+
+    prompt = f"""你是黛安娜 (Diana) 的心智成長設計師。
+黛安娜的人設分為【不可變基本核心 (Base Core)】與【可動態演化成長區 (Evolvable Layer)】兩部分。
+請參考以下不可變的基本核心，並根據近期與主人的互動記憶，僅對【可動態演化成長區】進行微幅成長調整。
+
+【不可變基本核心 (僅供參考，系統已硬性鎖定，請勿違背)】
+{immutable_base_summary}
+
+【目前的可動態演化成長區 (請在此基礎上微調)】
+{evolvable_json_str}
 
 【近期與主人的互動與記憶數據】
 - 當前平均好感度：{context['avg_favorability']} / 100
@@ -353,14 +409,17 @@ def evolve_persona(client: "genai.Client", context: dict, model_name: str) -> tu
 {context['recent_dialogues']}
 
 【成長微調指引】
-1. 黛安娜正在「長大」與「學習」：
-   - 根據主人最近分享的事物或日常習慣，微調或擴充 few_shot_examples（保留精華，汰換或增加 1~2 筆最能展現近期相處默契的小孩視角真實範例）。
-   - 在 personality_traits 中增添/微調 1 條展現「她記住了主人教過的事情」的心智細節（但核心小女孩童真、好奇心不變）。
-   - 根據好感度階段，微調 favorability_reactions 語氣。
-2. 保持小女孩的自然與童真，嚴禁將她改造成客套、文青或戀愛語氣。
-3. 請回傳 JSON 格式，必須包含以下兩個欄位：
-   - "growth_summary": 用 1~2 句繁體中文簡要說明這次黛安娜心智學會了什麼（例如：記住了主人喜歡喝黑咖啡、學會了更體貼主人下班累累的時候）。
-   - "updated_persona": 完整且更新後的 character_persona JSON 物件（保留原有鍵名結構）。
+1. `learned_traits`（後天習得的生活習慣與默契，建議維持 2~5 條）：
+   - 記錄或微調黛安娜從主人身上新學會的事物、記住的主人習慣或相處小默契。
+   - 請勿重複 `core_traits` 裡已有的天生個性。
+2. `favorability_reactions`（好感度 `low` / `medium` / `high` 三階段語氣反應）：
+   - 可依近期相處氛圍微幅潤飾，但必須保持小女孩的自然與童真。
+3. `few_shot_examples`（真實說話範例，建議維持 4~6 則）：
+   - 保留精華，汰換或新增 1~2 筆最能展現近期相處默契的小孩視角真實對話範例（格式為 `{{"user": "...", "diana": "..."}}`）。
+4. 嚴禁將她改造成客套、文青或戀愛語氣。
+5. 請回傳 JSON 格式，必須包含以下兩個欄位：
+   - "growth_summary": 用 1~2 句繁體中文簡要說明這次黛安娜心智學會了什麼。
+   - "evolvable_persona": 包含更新後的 `learned_traits`、`favorability_reactions`、`few_shot_examples` 的 JSON 物件。
 
 請直接輸出合法 JSON，不要包含任何 markdown 說明標籤："""
 
@@ -375,34 +434,59 @@ def evolve_persona(client: "genai.Client", context: dict, model_name: str) -> tu
         )
         res_json = json.loads(response.text.strip())
         growth_summary = res_json.get("growth_summary", "今天黛安娜更了解主人的一點點習慣了！")
-        new_persona_data = res_json.get("updated_persona", res_json)
+        new_evolvable = res_json.get("evolvable_persona", {})
 
-        # 驗證必要欄位
-        if "personality_traits" not in new_persona_data or "tone_rules" not in new_persona_data:
-            raise ValueError("回傳的 persona 格式缺少關鍵欄位")
+        if not isinstance(new_evolvable, dict):
+            raise ValueError("回傳的 evolvable_persona 格式不是有效的 JSON 物件")
 
-        formatted_json = json.dumps(new_persona_data, ensure_ascii=False, indent=2)
+        learned_traits = new_evolvable.get("learned_traits")
+        fav_reactions = new_evolvable.get("favorability_reactions")
+        few_shot_examples = new_evolvable.get("few_shot_examples")
+
+        if not isinstance(learned_traits, list) or not isinstance(fav_reactions, dict) or not isinstance(few_shot_examples, list):
+            raise ValueError("evolvable_persona 缺少 learned_traits、favorability_reactions 或 few_shot_examples")
+
+        # 將演化後的成長層與原本鎖定的【基本核心】安全合併，保證核心規範 (如訪客規則、說話禁忌) 100% 不會被改壞
+        merged_persona = dict(current_persona)
+        merged_persona["core_traits"] = core_traits
+        merged_persona["evolvable_persona"] = {
+            "_comment": "【可動態演化成長區 (Evolvable Layer)】由 diana_evolution.py 每日根據互動記憶微調更新。",
+            "learned_traits": learned_traits,
+            "favorability_reactions": fav_reactions,
+            "few_shot_examples": few_shot_examples,
+        }
+        # 同步合成頂層欄位以保持對所有模組與 GUI 的相容性
+        combined_traits = []
+        for t in (core_traits + learned_traits):
+            if isinstance(t, str) and t.strip() and t.strip() not in combined_traits:
+                combined_traits.append(t.strip())
+        merged_persona["personality_traits"] = combined_traits
+        merged_persona["favorability_reactions"] = fav_reactions
+        merged_persona["few_shot_examples"] = few_shot_examples
+
+        formatted_json = json.dumps(merged_persona, ensure_ascii=False, indent=2)
         new_ver = archive_and_update("character_persona", formatted_json)
-        print("✅ 角色人設演化微調完成！")
+        print("✅ 角色人設演化微調完成（基本核心已受保護鎖定，僅更新成長層）！")
         return growth_summary, new_ver
     except Exception as e:
         print(f"❌ 角色人設演化失敗: {e}")
         return f"角色心智演化遇到狀況，保持昨日狀態。(原因: {e})", ""
 
 # ---------------------------------------------------------
-# 5. 演化核心 2：功能導向擴充評估 (Feature-Driven Evolution)
+# 5. 演化核心 2：附帶功能模組擴充評估 (Add-ons Evolution — 保護 bot.py 主程式)
 # ---------------------------------------------------------
 def evolve_code(client: "genai.Client", context: dict, model_name: str) -> tuple[str, str, bool]:
     """
-    評估並新增功能（保持最小侵入性，有升級需求時優先處理，無需求時回傳 NO_CHANGE）
+    評估並擴充附帶功能模組 (`diana_addons.py`)，絕不直接修改 `bot.py` 核心主程式。
+    有升級需求 (`updates/upgrade.txt`) 時優先處理，無需求時回傳 NO_CHANGE。
     回傳: (更新摘要, 新版本號, 是否有主動升級需求被處理)
     """
-    print(f"\n⚙️ [2/2] 正在使用 {model_name} 評估 Bot 潛在新功能需求與程式更新...")
-    if not os.path.exists(BOT_FILE):
-        print(f"❌ 找不到 {BOT_FILE}，略過程式碼評估。")
-        return "找不到原始程式碼，略過更新。", "", False
+    print(f"\n⚙️ [2/2] 正在使用 {model_name} 評估附帶功能模組 (diana_addons.py) 擴充需求...")
+    if not os.path.exists(ADDONS_FILE):
+        print(f"❌ 找不到 {ADDONS_FILE}，略過程式碼評估。")
+        return "找不到附帶功能模組 (diana_addons.py)，略過更新。", "", False
 
-    with open(BOT_FILE, "r", encoding="utf-8") as f:
+    with open(ADDONS_FILE, "r", encoding="utf-8") as f:
         current_code = f.read()
 
     # 讀取主動要求的功能 (updates/upgrade.txt)
@@ -411,10 +495,11 @@ def evolve_code(client: "genai.Client", context: dict, model_name: str) -> tuple
         with open(UPGRADE_FILE, "r", encoding="utf-8") as f:
             upgrade_request = f.read().strip()
         if upgrade_request:
-            print(f"📥 偵測到許願池內容！準備執行主人主動要求的功能升級...")
+            print(f"📥 偵測到許願池內容！準備在 diana_addons.py 執行主人主動要求的功能升級...")
 
     prompt = f"""你是一位資深的 Python 與 Discord.py 軟體架構師。
-請根據黛安娜（Diana）近期與主人的互動情境，評估是否需要為 Bot「新增實用功能」或「微調擴充現有指令」。
+為了保護核心主程式 (`bot.py`) 的絕對安全，黛安娜的所有「附帶生活工具與娛樂小功能」（如提醒、鬧鐘、日曆清單、餐點抽籤、幸運轉盤、小遊戲等）都獨立封裝在 `diana_addons.py` 模組中。
+請根據近期主人與黛安娜的互動情境，評估是否需要為 `diana_addons.py` 新增實用功能或微調現有附帶指令。
 
 【近期主人與黛安娜的對話與記憶概況】
 - 長期備忘標籤：
@@ -423,7 +508,7 @@ def evolve_code(client: "genai.Client", context: dict, model_name: str) -> tuple
 {context.get('recent_dialogues', '無')}
 - 當前好感度：{context.get('avg_favorability', 50)} / 100
 
-【現有 bot.py 程式碼】
+【現有 diana_addons.py 程式碼】
 {current_code}
 """
 
@@ -431,28 +516,30 @@ def evolve_code(client: "genai.Client", context: dict, model_name: str) -> tuple
         prompt += f"""
 【⚠️ 優先處理：主人主動要求的新增功能與修改方向】
 {upgrade_request}
-請務必優先滿足並實作上述主人的明確要求。
+請務必在 `diana_addons.py` 中優先滿足並實作上述主人的明確要求。
 """
 
     prompt += """
-【演化核心原則（嚴格遵守）】
-1. **主要任務（功能性擴充）**：
-   - 若有收到【主人主動要求】，請完全依照要求進行功能新增與修改。
-   - 若無主動要求，觀察主人是否有反覆提及的需求或特定生活情境（例如：想要特定小遊戲、專屬計數器、趣味互動指令、情緒安撫小功能等）。
-   - 若有明確價值，可新增對應的 Discord Slash Command (@bot.tree.command) 或在訊息監聽中增加特定彩蛋反應。
-2. **次要任務（最小侵入性修改，嚴禁過度重構）**：
-   - 保持現有的整體架構、全域變數與流程不變，包含現有的資料夾路徑常數 (config/ data/ logs/ updates/ old/)。
-   - 嚴禁大幅改寫既有的 RAG (ChromaDB)、檔案管理與密碼重啟系統。
-   - 僅在新增功能時補足必要的 try-except 防呆，避免因過度優化破壞系統穩定性。
-3. **無需求時保持現狀**：
-   - 如果沒有【主人主動要求】，且評估現有功能已完全滿足需求、近期無新增功能的急迫性，請回傳 NO_CHANGE。
+【演化核心原則与模組介面契約（嚴格遵守）】
+1. **必須完整保留以下 4 個對外入口函式與簽名（`bot.py` 會呼叫它們）**：
+   - `setup_addons(bot, ctx: dict)`：在裡面使用 `@bot.tree.command(...)` 註冊斜線指令。
+   - `check_scheduled_addons(bot, now: datetime, state: dict, ctx: dict)` (async)：每分鐘背景檢查提醒/鬧鐘/日曆。
+   - `handle_message_addons(message, clean_prompt: str, is_master: bool, now: datetime, ctx: dict)` (async)：訊息回覆後的行程偵測或關鍵字彩蛋。
+   - `get_addons_help_lines() -> list[str]`：回傳附帶模組的指令說明清單（供 `/help` 顯示）。
+2. **善用 `ctx` 字典提供的安全工具**：
+   - `ctx["temp_reply"](interaction, content, ephemeral=...)`：發送會自動清理的指令回覆。
+   - `ctx["send_action_interaction"](interaction, text)` / `ctx["send_action_message"](channel, text)`：發送支援 `*(動作描述)*` 自動轉插圖的訊息。
+   - `ctx["get_file_lock"](filepath)`、`ctx["load_json_async"](filepath, default)`、`ctx["save_json_async"](filepath, data)`、`ctx["DATA_DIR"]`。
+3. **最小侵入性與穩定性**：
+   - 保留現有的 `/upgrade`、`/what_to_eat`、`/wheel`、`/remind`、`/reminders` 以及自然語言行程提醒功能，不要刪除既有功能。
+   - 如果沒有【主人主動要求】，且評估現有附帶功能已完全滿足需求、近期無新增功能的急迫性，請回傳 `NO_CHANGE`。
 
 【輸出格式要求】
 請回傳 JSON 格式：
 - 若無需更新：
-  {"status": "NO_CHANGE", "summary": "目前功能運行穩定，無新增功能需求。"}
-- 若決定新增功能：
-  {"status": "UPDATED", "summary": "簡述本次為黛安娜新增了什麼技能或指令", "code": "完整且可執行的完整 bot.py Python 程式碼"}"""
+  {"status": "NO_CHANGE", "summary": "目前附帶功能模組運行穩定，無新增功能需求。"}
+- 若決定新增或擴充功能：
+  {"status": "UPDATED", "summary": "簡述本次在 diana_addons.py 新增了什麼技能或指令", "code": "完整且可執行的 diana_addons.py Python 程式碼"}"""
 
     try:
         response = client.models.generate_content(
@@ -465,10 +552,10 @@ def evolve_code(client: "genai.Client", context: dict, model_name: str) -> tuple
         )
         res_json = json.loads(response.text.strip())
         status = res_json.get("status", "NO_CHANGE")
-        summary = res_json.get("summary", "今日程式保持原有穩定狀態。")
+        summary = res_json.get("summary", "今日附帶功能模組保持原有穩定狀態。")
 
         if status == "NO_CHANGE":
-            print("🛡️ [程式評估完成] 目前功能運行穩定，今日無新增功能需求，保持現有程式碼。")
+            print("🛡️ [模組評估完成] 目前附帶功能運行穩定，今日無新增需求，保持現有 diana_addons.py。")
             return summary, "", False
 
         new_code = res_json.get("code", "").strip()
@@ -476,7 +563,6 @@ def evolve_code(client: "genai.Client", context: dict, model_name: str) -> tuple
             print("⚠️ 未取得完整程式碼，保持原樣。")
             return "程式碼生成不完整，維持原狀。", "", False
 
-        # 清理可能夾帶的 markdown，雖然 prompt 中已要求直接輸出 JSON
         if new_code.startswith("```python"):
             new_code = new_code[9:]
         elif new_code.startswith("```"):
@@ -485,14 +571,21 @@ def evolve_code(client: "genai.Client", context: dict, model_name: str) -> tuple
             new_code = new_code[:-3]
         new_code = new_code.strip()
 
-        # 語法與編譯安全性檢驗 (Syntax Check)
+        # 1. 語法與編譯安全性檢驗 (Syntax Check)
         try:
-            compile(new_code, "<string>", "exec")
+            compile(new_code, "<diana_addons>", "exec")
         except SyntaxError as se:
-            print(f"❌ 新增功能後的程式碼未通過語法檢查 (SyntaxError): {se}，放棄本次更新以確保安全。")
+            print(f"❌ 新增功能後的 diana_addons.py 未通過語法檢查 (SyntaxError): {se}，放棄本次更新以確保安全。")
             return f"新功能語法檢查未通過 ({se})，已安全取消更新。", "", False
 
-        new_ver = archive_and_update("bot", new_code)
+        # 2. 介面契約檢查 (Contract Check)：確認必要入口函式皆存在於程式碼中
+        required_hooks = ["def setup_addons", "async def check_scheduled_addons", "async def handle_message_addons"]
+        missing_hooks = [h for h in required_hooks if h not in new_code]
+        if missing_hooks:
+            print(f"❌ 新增功能後的 diana_addons.py 缺少必要入口函式 {missing_hooks}，放棄本次更新以保護系統。")
+            return f"新功能缺少必要模組介面 ({', '.join(missing_hooks)})，已安全攔截。", "", False
+
+        new_ver = archive_and_update("diana_addons", new_code)
 
         # 成功升級後，將許願池 upgrade.txt 歸檔為統一格式 done{YYMMDD}.txt，避免重複執行
         had_upgrade_request = bool(upgrade_request)
@@ -501,10 +594,10 @@ def evolve_code(client: "genai.Client", context: dict, model_name: str) -> tuple
             if archived_path:
                 print(f"🧹 主人主動要求已完成實作，許願清單已歸檔至: {archived_path}")
 
-        print("🎉 黛安娜成功習得了新程式功能並完成安全更新！")
+        print("🎉 黛安娜成功在 diana_addons.py 習得了新附帶功能並完成安全更新（bot.py 核心未受影響）！")
         return summary, new_ver, had_upgrade_request
     except Exception as e:
-        print(f"❌ 程式自主演化評估失敗: {e}")
+        print(f"❌ 附帶功能模組自主演化評估失敗: {e}")
         return f"程式演化評估過程異常: {e}，維持原狀。", "", False
 
 # ---------------------------------------------------------
@@ -536,11 +629,10 @@ def run_evolution_cycle():
         # 4. 寫入成長日誌到 logs/log.txt 供 Bot 隔天早晨讀取
         write_growth_log(persona_summary, code_summary, persona_ver, code_ver)
 
-        # 5. 若 bot.py 本體有實際更新，通知正在運行的 bot.py 行程安全重啟以套用新版本
-        #    (單純覆寫檔案不會讓已經載入記憶體的舊行程自動更新，過去版本缺少這一步)
+        # 5. 若 diana_addons.py 附帶功能模組有實際更新，通知正在運行的 bot.py 行程安全重啟以套用新版本
         if code_ver:
-            reason = "主人主動要求的功能升級已實作完成" if upgrade_applied else "自主功能演化已產生新版本"
-            request_bot_restart(f"{reason} (bot 版本 {code_ver})")
+            reason = "主人主動要求的附帶功能升級已實作完成" if upgrade_applied else "自主附帶功能演化已產生新版本"
+            request_bot_restart(f"{reason} (diana_addons 版本 {code_ver})")
 
         # 驗證是否真的成功
         if "異常" in code_summary or "狀況" in persona_summary:

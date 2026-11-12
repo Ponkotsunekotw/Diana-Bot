@@ -1,0 +1,10 @@
+{
+  "local_base_url": "http://127.0.0.1:1234/v1",
+  "local_model": "google/gemma-4-e2b",
+  "web_base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+  "web_model": "gemini-3.5-flash-lite",
+  "image_endpoint": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent",
+  "image_model": "gemini-3.1-flash-image",
+  "temperature": 0.75,
+  "thinking_tokens": 256
+}

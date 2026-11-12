@@ -4,3 +4,4 @@ chromadb
 sentence-transformers
 aiohttp
 google-genai
+schedule
