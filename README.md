@@ -1,400 +1,147 @@
-# Diana Bot
+# Diana Bot — Persistent AI Companion & Control Center
 
-Diana 是一個以 Python 建構的 **Persistent AI Companion / AI Agent 原型**。
+Diana 是一個以 Python 建構的 **Persistent AI Companion / AI Agent 原型**，結合了持續運行的 Discord 互動核心（[`bot.py`](bot.py)）、安全隔離演化系統（[`diana_evolution.py`](diana_evolution.py) + [`diana_addons.py`](diana_addons.py)）、智慧自適應圖形化中控台（[`gui.py`](gui.py)）與零依賴原生冷安裝精靈（[`DianaSeedInstaller.exe`](DianaSeedInstaller.exe)）。
 
 它並不是單純將 Discord 訊息轉送給 LLM 的聊天機器人。Diana 本身會持續運行並維護自己的記憶、角色設定、使用者關係與系統狀態；LLM 則作為需要理解、推理與生成內容時使用的智能模組。
 
-目前 Discord 是 Diana 的主要互動介面。
-## 📖 Project Documents
-
-如果你對 Diana 為什麼誕生，以及這個專案背後的想法有興趣：
-
-- [開發故事：從 Neuro-sama 到 Diana 的八年]
-- [Diana AI Agent 開發與效能優化日誌]
+> **核心理念：Model Intelligence ≠ System Intelligence**  
+> **LLM 負責理解、推理與生成；Python 系統負責記住、執行、維持狀態與持續存在。**
 
 ---
 
-## ✨ 目前功能
+## 🏗️ 基本運作方式與系統架構
 
-### 💬 AI 對話
-
-Diana 可以透過 Discord 與使用者進行自然語言對話。
-
-系統會根據：
-
-* 角色 Persona
-* 最近對話
-* 長期記憶
-* 使用者資料
-* 關係狀態
-* 當前系統狀態
-
-建立提供給 LLM 的上下文，而不是每次都進行完全獨立的聊天。
-
----
-
-## 🧠 長期與短期記憶
-
-Diana 具有持續性的記憶系統。
-
-### Short-term Memory
-
-近期對話與重要上下文會保存在本地資料中，用於維持目前對話的連續性。
-
-### Long-term Memory
-
-系統使用 ChromaDB 建立長期記憶資料庫。
-
-需要時 Diana 可以搜尋與目前話題相關的過去記憶，再將結果提供給 LLM。
-
-因此重新啟動 Bot 並不代表 Diana 完全失去之前的記憶。
-
----
-
-## 👤 使用者與關係狀態
-
-Diana 不只保存聊天紀錄，也可以維護與使用者相關的狀態，例如：
-
-* 使用者資料
-* 關係資訊
-* 好感度
-* 互動狀態
-* 長期記憶
-* 角色自身狀態
-
-這些資料會影響後續互動，而不是只存在單次 Prompt 中。
-
----
-
-## 💤 主動行為
-
-Diana 並不一定需要等待使用者先傳送訊息。
-
-系統具有自己的持續運行邏輯，可以根據目前狀態進行主動行為，例如：
-
-* 主動發起對話
-* 執行提醒
-* 根據無聊值等狀態決定是否互動
-* 執行週期性背景工作
-* 整理記憶
-
-因此 Diana 的 Python Runtime 才是持續存在的主體，LLM 並不需要一直保持運行。
-
----
-
-## ⏰ Reminder
-
-Diana 具有提醒功能。
-
-提醒會由系統保存並在指定條件或時間觸發，而不是依賴 LLM 一直記住提醒內容。
-
----
-
-## 🎭 Persona 系統
-
-角色人格由獨立 Persona 設定管理。
-
-使用者可以：
-
-* 使用內建的 Diana Persona
-* 自己建立角色
-* 修改角色背景與個性
-* 設定角色與使用者的關係
-* 設定說話方式與行為規範
-* 使用 LLM 協助生成角色設定
-
-GUI 提供三種 Persona 建立方式：
-
-**Diana Example**
-
-直接使用 Diana 的預設角色設定。
-
-**Blank Template**
-
-從空白角色模板建立自己的 AI 角色。
-
-**AI Generate**
-
-輸入自然語言描述後，由 LLM 產生三個不同的 Persona 方案供使用者選擇與修改。
-
----
-
-## 🖼️ 圖片功能
-
-Diana 具有獨立的 Image API。
-
-圖片系統可以使用角色 Reference Images，在產生圖片時盡可能維持角色外觀與風格一致。
-
-系統也可以依照 Diana 當下的動作或情境使用對應圖片。
-
-如果缺少需要的角色動作圖片，可以透過 Image API 建立新的圖片。
-
----
-
-## 🌐 三套獨立 AI API
-
-Diana 目前使用三套彼此獨立的 AI API：
-
-### Local API
-
-主要的本地 LLM API。
-
-可搭配提供 OpenAI-compatible API 的本地推理服務使用。
-
-例如：
-
-`http://127.0.0.1:1234/v1`
-
-適合使用 LM Studio 等本地 LLM Server。
-
-### Web API
-
-獨立的網路 AI API。
-
-用於需要另一套線上模型能力的功能，不與 Local API 共用設定。
-
-### Image API
-
-獨立的圖片生成 API。
-
-負責 Diana 的圖片相關功能。
-
-三套 API 的 Key **彼此完全分離**，不共用同一個 Key 設定檔。
-
----
-
-# 🖥️ Diana Control Center
-
-Diana 現在提供圖形化控制介面，不需要手動修改所有設定檔才能啟動。
-
-啟動：
-
-`start_gui.bat`
-
-即可開啟 Diana Control Center。
-
----
-
-## 🚀 安裝與初始化
-
-GUI 可以協助完成：
-
-* Dependencies 安裝
-* Local API 設定
-* Web API 設定
-* Image API 設定
-* Discord Token 設定
-* Persona 設定
-* Bot 啟動
-
-API Key 與 Discord Token 會分別保存，避免不同 API Credential 互相干擾。
-
----
-
-## 🔌 API Configuration
-
-GUI 可以設定 Diana 使用的：
-
-**Local API**
-
-* Endpoint
-* Model
-* API Key
-
-**Web API**
-
-* Endpoint
-* Model
-* API Key
-
-**Image API**
-
-* Endpoint
-* Model
-* API Key
-
-三個 API 的設定與 Key 均獨立管理。
-
----
-
-## 🎮 Bot Control
-
-完成設定後，可以直接從 GUI：
-
-* Start
-* Stop
-* Restart
-
-Diana。
-
-因此日常使用不需要再手動開啟 Terminal 執行 Python 指令。
-
----
-
-# 📊 Runtime Status
-
-Control Center 可以顯示 Diana 目前正在進行的主要工作階段。
-
-例如：
-
-`等待 → 分析 → 記憶查詢 → LLM 思考 → 回覆 → 整理記憶 → 等待`
-
-GUI 會亮起目前所在的階段，讓使用者可以直接看到 Diana 現在正在做什麼。
-
-這些狀態只是在原有 Bot 流程中加入 GUI 顯示，不會改變原本的 Bot 工作方式。
-
----
-
-# 🧬 Evolution
-
-Diana 包含獨立的 Evolution 系統。
-
-Evolution 可以定期分析目前的角色與系統狀態，並進行成長或調整。
-
-Evolution 與主要 Discord Bot 分開運行，具有自己的：
-
-* API
-* Model
-* Log
-* Backup
-* Version
-* Restart 機制
-
-系統在修改重要內容前會建立備份，並記錄成長過程。
-
-Evolution 的目標不是單純讓 LLM 每次產生不同回答，而是讓部分變化能夠真正保存在 Diana 的持久系統中。
-
----
-
-# 🏗️ 基本運作方式
-
-Diana 的基本互動流程可以簡化為：
+Diana 的基本互動流程：
 
 ```text
-Discord Message
+Discord Message (忽略純網址與冷啟動未認主訊息)
       ↓
-Python Runtime
+Python Runtime (bot.py + diana_addons.py)
       ↓
-Analyze
+Analyze (身分判斷：主人 / 訪客、情緒與意圖)
       ↓
-Memory Retrieval
+Memory Retrieval (短期記憶 + ChromaDB 長期向量記憶 + 訪客筆記)
       ↓
-Persona + Context
+Persona + Context (核心人設 + 可演化個性層 + 系統狀態)
       ↓
-LLM
+LLM (主人 / 訪客獨立分流：Local API 或 Web API)
       ↓
-Response
+Response + Action Image (文字回覆 + 對應動作插圖)
       ↓
-Memory / State Update
+Memory / State Update (對話紀錄、好感度、訪客事件筆記、排程)
       ↓
 Discord
 ```
 
-LLM 是 Diana 的推理與語言能力之一，而不是整個 Diana Runtime。
+---
 
-即使沒有正在呼叫 LLM，Python 系統仍然可以維護：
+## ✨ 核心功能與設計特色
 
-* 狀態
-* 記憶
-* Reminder
-* 排程
-* 主動行為
-* 資料保存
+### 💬 AI 對話、冷啟動保護與雙引擎分流
+- **冷啟動安全保護與純網址過濾**：在 `data/base.json` 尚未綁定主人（`master_id`）前，系統處於冷啟動保護狀態，預設不回覆任何陌生訊息，避免將訪客誤認為主人；首次啟動後由主人在 Discord 頻道輸入 `/user 0000`（預設管理員密碼為 `0000`）完成認主。訊息內容若僅為網頁連結也會自動忽略。
+- **主人 / 訪客獨立推理引擎分流**：主人與訪客可分別指定使用 **Local API（Ollama / LM Studio）** 或 **Web API（如 Google Gemini）** 與各自獨立的模型名稱，支援透過 Discord 指令 `/switch`（可選 `master` / `guest` / `both`）或 GUI 儀表板即時熱切換，無須重啟 Bot。
+
+### 🧠 長期記憶、短期記憶與訪客關係
+- **Short-term Memory**：近期對話與上下文保存於 `data/memory.json`。
+- **Long-term Memory**：使用 ChromaDB（`diana_memory_db/`）保存長期向量記憶，並在需要時自動檢索相關過去記憶注入上下文。
+- **主人與訪客關係狀態**：維護主人長效備忘錄（`data/user_profile.json`）、好感度（`data/favorability.json`）、排程提醒（`data/reminders.json`），以及獨立的**訪客認知筆記與事件記憶（`data/guest_notes.json`）**。
+
+### 💤 主動行為與模組化附帶功能（`diana_addons.py`）
+- 系統會在背景持續運行，依狀態與無聊值主動發起話題、執行週期性記憶整理與提醒檢查。
+- 附帶功能（提醒、日曆行程清單、自然語言時間偵測、美食與自訂幸運轉盤、演化許願池等）獨立封裝於 `diana_addons.py`，由 `bot.py` 透過 `try-except` 沙箱呼叫（`setup_addons`、`check_scheduled_addons`、`handle_message_addons`）。
+
+### 🧬 安全演化隔離架構（`diana_evolution.py`）
+- Evolution 與主要 Discord Bot 分開運行，擁有獨立的 API 金鑰、模型、日誌、備份與重啟機制。
+- **雙重隔離保護**：
+  1. **程式碼隔離**：`diana_evolution.py` 的程式碼演化僅能修改附帶模組 `diana_addons.py`，絕不覆寫核心主程式 `bot.py`。
+  2. **人格雙層隔離**：`config/character_persona.json` 拆分為受保護的**基本核心**（`core_traits`、`speech_patterns`、`tone_rules`、`guest_attitude`、`background`、`relationship`）與**可演化動態個性層**（`evolvable_persona`：`learned_traits`、`favorability_reactions`、`few_shot_examples`），防止演化覆寫角色根本人設。
+
+### 🖼️ 動作插圖與參考圖系統（`image_gen.py`）
+- 具備獨立的 Image API 與 `img/reference/` 角色參考圖庫，可依對話動作關鍵字（`config/action_images.json`）搭配對應動作插圖，或在缺少動作圖片時透過 Image API 生成新圖片。
+
+### 🌐 四組獨立憑證與 API 設定
+系統嚴格隔離四組憑證檔案，互不干擾：
+- `config/discord_token.txt`（Discord Bot Token）
+- `config/google_api_key_chat.txt`（聊天專用 Web API Key）
+- `config/google_api_key_evolution.txt`（演化專用 Key，支援第 2 行指定演化專用模型名稱）
+- `config/google_api_key_image.txt`（動作插圖生成專用 Key）
 
 ---
 
-# 📦 如何使用
+## 🖥️ Diana Control Center — 智慧自適應中控台（`gui.py`）
 
-### 1. 下載專案
+Windows 環境可直接雙擊 `start_gui.bat`，或透過指令啟動：
 
-下載 Release 或 Clone Repository。
-
-### 2. 啟動 GUI
-
-Windows 執行：
-
-```text
-start_gui.bat
+```bash
+python gui.py
 ```
 
-### 3. 安裝 Dependencies
+### 架構與自適應介面設計
+- **分層架構**：由 `RuntimeLifecycleState` / `ViewportLayoutState` 追蹤任務狀態並於 `finally` 重置，`ConfigRepository` 以原子寫入管理設定與記憶包，`ExecutionWorkers` 負責非同步背景作業。
+- **螢幕感知與動態重排**：啟動自動計算約 84% 寬 × 82% 高並置中（最小 `780x500`）；左側導覽列依視窗寬度按比例縮放（展開 `19%`、窄視窗 `< 980px` 自動收合為圖示模式 `6%`，亦可用 `◀ / ▶` 手動切換）；儀表板 KPI 卡片於 `1x4` 與 `2x2` 間自動重排，下方日誌區採用可上下拖曳的 `tk.PanedWindow`。
 
-在 GUI 中執行依賴套件安裝。
-
-### 4. 設定 AI API
-
-至少確認需要使用的 API 已正確設定。
-
-Local API、Web API 與 Image API 為三套獨立設定。
-
-### 5. 設定 Discord
-
-輸入自己的 Discord Bot Token。
-
-Discord Bot 必須先在 Discord Developer Portal 建立。
-
-### 6. 建立角色
-
-選擇：
-
-* Diana Example
-* Blank Template
-* AI Generate
-
-其中一種方式建立 Persona。
-
-### 7. 啟動 Diana
-
-回到主頁按下 Start。
-
-連線成功後即可從 Discord 與 Diana 互動。
+### 中控台核心功能頁籤
+1. **即時儀表板（Runtime Dashboard）**
+   - **連線狀態與控制**：一鍵 `Start / Stop / Restart`，搭配 6 階段向量進度管線（`PipelineStepperCanvas`）與支援篩選、上色的即時終端機日誌。
+   - **目前角色（點擊快速切換）**：點擊方塊即可掃描 `config/*.persona` 角色檔（JSON 格式），確認備份提示後直接載入覆寫 `config/character_persona.json`；亦支援匯出自訂命名的 `.persona` 角色檔。
+   - **關係（訪客）與排程（提醒）雙獨立方塊**：
+     - **👥 關係**：點擊快速查看與編輯**除主人以外的訪客**好感度、對象認知筆記與事件記憶。
+     - **⏰ 排程**：點擊快速查看、新增或刪除 `data/reminders.json` 中的排程提醒。
+   - **👑 主人引擎 / 👤 訪客引擎雙獨立方塊**：點擊可各自切換 **Local API**（自動偵測本地模型）或 **Web API**（內建關鍵字查詢框，可即時向 API `/models` 檢索可用模型並套用）。
+2. **連線與獨立憑證設定**
+   - 提供 Ollama（`11434`）與 LM Studio（`1234`）一鍵預設、四組獨立金鑰 `👁 顯示 / 🙈 隱藏` 切換與連線延遲測試。
+3. **角色設定工坊（Persona Studio）**
+   - 右上角提供 **Canvas 滑桿開關（`ModeSliderSwitch`）**，可於「📝 表單模式」與「`{ }` JSON 原始碼模式」間即時雙向同步切換。
+   - 支援 **Diana Example**、**Blank Template**、**AI Generate（Local / Web API 生成三候選方案）** 及匯出 `.persona`。
+4. **記憶管理中心（Memory Studio）**
+   - 直接檢視與編輯 `data/user_profile.json`、`data/memory.json`、`data/favorability.json`、`data/base.json`、`data/reminders.json`、`data/guest_notes.json` 與 ChromaDB 記憶庫。
+   - 支援一鍵匯出 / 匯入自定義 **`.memory` 記憶備份包**（底層為 ZIP 壓縮檔），預設匯出檔名為 `{當前角色名}-Backup-{yymmdd}-{流水號}.memory`。
+5. **系統診斷、演化控制與補丁推送**
+   - 視覺化檢查必要環境、套件、憑證、參考圖庫與 `.seed` 狀態；支援一鍵觸發 `diana_evolution.py --run-now`、封裝 `.seed` 種子包，以及透過頂部工具列 **「🩹 開啟補丁推送工具」** 啟動 `patch_pusher.py`（Patch Pusher v2.0）安裝並推送補丁。
 
 ---
 
-# ⚠️ Project Status
+## 🌱 零依賴原生分級冷安裝精靈（`DianaSeedInstaller.exe` + `.seed`）
 
-Diana 目前仍屬於 **Early Prototype / Experimental AI Agent**。
+專案內建基於 C#（`.NET Framework 4.x`，無須預裝 Python 或任何第三方執行環境）的分級引導式原生冷安裝與種子封裝精靈：
 
-目前版本的重點不是建立另一個通用聊天 UI，而是實驗：
+- **主要檔案**：
+  - `DianaSeedInstaller.exe`：原生安裝與封裝執行檔（自由縮放視窗與滾輪容器，Windows 10/11 可直接雙擊執行）。
+  - `Diana-Bot.seed`：無記憶純淨系統包（已自動剔除所有個人記憶、`data/*.json` 私密資料、`diana_memory_db/` 與 API Key / Token）。
+  - `installer/DianaSeedInstaller.cs` & `installer/build_installer.bat`：完整 C# 原始碼與一鍵編譯腳本。
+- **雙模式分級引導**：
+  1. **⚡ 簡易完整安裝**：適合新手用戶，強制使用 `.seed` 無記憶包，自動部署至目標資料夾、安裝 Python 3.12 與依賴套件、安裝 Ollama 並建立桌面捷徑，完成後自動進入 **Discord Bot API Token 取得教學與一鍵儲存頁**（引導開啟三大 Intents 與輸入 `/user 0000` 認主）。
+  2. **🛠️ 自訂安裝（推薦）**：逐頁設定系統來源（本地 `.seed` 或直接從 GitHub [Ponkotsunekotw/Diana-Bot](https://github.com/Ponkotsunekotw/Diana-Bot) 下載最新預覽版）、Python 環境、以及本地 AI 方案（Ollama / LM Studio / 純雲端 API）。
+- **線上三級模型選單與保守硬體速度查表**：
+  - 支援 **來源類型 → 研發廠牌（Google / Qwen / DeepSeek / GLM / NVIDIA）→ 版本與線上回報尺寸** 動態抓取。
+  - 內建保守速度查表（假設中低端顯卡與 DDR4）：以 $\text{可用顯存} = \max(0,\ \text{VRAM} - 2.0\text{ GB})$ 與 $\text{可用 DRAM} = \text{實體記憶體} \times 60\%$ 計算模型填充率，自動顯示預估推論速度分級。
+- **CLI 命令列用法**：
+  ```bash
+  # 啟動圖形化分級冷安裝精靈
+  DianaSeedInstaller.exe
 
-> 如果將 LLM 當成「需要思考時才呼叫的智能模組」，並把記憶、狀態、關係、排程與行為保存在持續運行的軟體系統中，能否逐漸建立一個具有長期連續性的 AI Companion？
+  # 將指定專案目錄封裝為無記憶 .seed 系統包
+  DianaSeedInstaller.exe --pack-seed . Diana-Bot.seed
 
-因此目前程式仍可能存在 Bug、未完成介面或實驗性功能。
-
-不建議直接用於需要高可靠度或安全關鍵的用途。
-
----
-
-# 🛣️ Future Direction
-
-Diana 未來的方向是逐步從 Discord Companion 擴展成更加完整的 Persistent AI Agent。
-
-預計研究方向包括：
-
-* 更完整的 World Model
-* Policy / Permission System
-* 更自然的長期記憶
-* System 1 / System 2 分工
-* Vision
-* Audio / Voice
-* Web Tools
-* Smart Home
-* 更多 Interface Adapter
-* 更成熟的自主行為
-* 從經驗中形成新的持久能力
-
-Discord 最終只是 Diana 與外部世界互動的其中一種介面。
+  # 將 .seed 純淨部署至目標資料夾
+  DianaSeedInstaller.exe --extract-seed Diana-Bot.seed C:\Diana-Bot
+  ```
 
 ---
 
-## 核心理念
+## 📦 快速開始（手動部署）
 
-**Model Intelligence ≠ System Intelligence**
+1. **取得專案**：執行 `DianaSeedInstaller.exe` 進行冷安裝，或 Clone 本倉庫。
+2. **啟動控制中心**：執行 `start_gui.bat`（或 `python gui.py`）。
+3. **安裝依賴套件**：在 GUI 的診斷／設定頁面執行 `requirements.txt` 安裝。
+4. **設定憑證與模型**：於「連線與金鑰」頁分別填入 Discord Token 與 Local / Web / Image API 設定。
+5. **選擇或建立角色**：在儀表板點擊「目前角色」載入 `config/*.persona`，或至「角色設定工坊」設計角色。
+6. **啟動並認主**：回到儀表板點擊 **Start**，待 Bot 上線後於 Discord 頻道輸入 `/user 0000` 完成主人綁定即可開始互動。
 
-一個更強的 LLM 不一定等於一個更完整的 AI Agent。
+---
 
-Diana 的實驗方向是：
+## ⚠️ Project Status & 🛣️ Future Direction
 
-**LLM 負責理解、推理與生成；Python 系統負責記住、執行、維持狀態與持續存在。**
+Diana 目前仍屬於 **Early Prototype / Experimental AI Agent**，重點在於實驗「以持續運行的軟體系統維護記憶、關係、排程與演化，並將 LLM 作為按需呼叫的推理模組」的架構原型，不建議直接用於高可靠度或安全關鍵用途。
 
-讓一次性的推理結果有機會逐漸成為可以被系統保存、再次使用，甚至轉化成持久能力的經驗。
+未來預計研究方向包含：更完整的 World Model、Policy / Permission System、System 1 / System 2 分工、Vision 與 Audio / Voice 擴展、Web Tools、Smart Home、更多 Interface Adapter，以及從經驗中形成新的持久能力。
