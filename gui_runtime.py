@@ -6,6 +6,7 @@ DATA_DIR = "data"
 STATUS_FILE = os.path.join(DATA_DIR, "runtime_status.json")
 
 def update_gui_status(stage: str, detail: str = "", backend: str = ""):
+    tmp = None
     try:
         os.makedirs(DATA_DIR, exist_ok=True)
         payload = {
@@ -19,5 +20,12 @@ def update_gui_status(stage: str, detail: str = "", backend: str = ""):
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
         os.replace(tmp, STATUS_FILE)
+        tmp = None
     except Exception:
         pass
+    finally:
+        if tmp and os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except Exception:
+                pass
